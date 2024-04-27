@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Pachinko Game with Conditional Ball Guidance</title>
+    <script src='https://cdn.jsdelivr.net/npm/matter-js'></script>
+    <style>
+        body,
+        html {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div id='world'></div>
+    <script>
+    var Engine = Matter.Engine,
+        Render = Matter.Render,
+        Runner = Matter.Runner,
+        World = Matter.World,
+        Bodies = Matter.Bodies,
+        Body = Matter.Body,
+        Events = Matter.Events;
+
+    var engine = Engine.create({
+        // Gravedad desactivada para usar fuerza dirigida hacia un punto
+        gravity: { y: 3 }
+    });
+
+    var render = Render.create({
+        element: document.body,
+        engine: engine,
+        options: {
+            width: 600,
+            height: 800,
+            wireframes: false,
+            background: '#f4f4f8'
+        }
+    });
+
+    // Agregar muros y obstáculos
+    World.add(engine.world, [
+        Bodies.rectangle(300, 0, 600, 50, { isStatic: true, label: 'Wall' }),
+        Bodies.rectangle(300, 800, 600, 50, { isStatic: true, label: 'Wall' }),
+        Bodies.rectangle(600, 400, 50, 800, { isStatic: true, label: 'Wall' }),
+        Bodies.rectangle(0, 400, 50, 800, { isStatic: true, label: 'Wall' })
+    ]);
+
+    // Crear obstáculos en forma de pirámide y determinar el punto central
+    var centroPachinco = 300;
+    var offsetX = centroPachinco, offsetY = 100, spaceX = 50, spaceY = 55, rows = 10;
+    var paths = []; // Almacenar caminos para cada fila
+    for (var row = 0; row < rows; row++) {
+        for (var col = 0; col <= row; col++) {
+            var x = offsetX - row * spaceX / 2 + col * spaceX;
+            var y = offsetY + row * spaceY;
+            var obstacle = Bodies.circle(x, y, 10, {
+                isStatic: true,
+                label: 'Obstacle',
+                render: {
+                    fillStyle: '#ff6059'
+                },
+                restitution: (row === 0 && col === Math.floor(row / 2)) ? 0 : 100 // Restitución 0 para el obstáculo central en la primera fila
+            });
+            World.add(engine.world, obstacle);
+            paths.push({ x: x, y: y }); // Guardar cada posición de obstáculo como parte del camino
+        }
+    }
+    // Añadir el target final
+    var target = { x: offsetX, y: offsetY + rows * spaceY };
+    paths.push(target);
+
+    // Agregar pelotas y aplicar una fuerza dirigida hacia el punto objetivo
+    Events.on(engine, 'afterUpdate', function (event) {
+        if (event.timestamp % 5000 < 20) {
+            var delta = 1;  
+            var maxVariabilidad = 3;
+            var ballX;
+
+            do {
+                variabilidad = (Math.random() * (2 * (maxVariabilidad + delta)) - (maxVariabilidad + delta));
+                if (Math.abs(variabilidad) < delta) {
+                    variabilidad += (variabilidad >= 0) ? delta : -delta;
+                }
+                ballX = centroPachinco + variabilidad;
+            } while (ballX >= centroPachinco - delta && ballX <= centroPachinco + delta);
+
+            let ball = Bodies.circle(ballX, 50, 12, {
+                density: 0.05,
+                restitution: 0.05,
+                friction: 5,
+                render: { fillStyle: '#4CAF50' },
+                pathIndex: 0 // Iniciar con el primer punto del camino
+            });
+            World.add(engine.world, ball);
+
+            // Aplicar una fuerza constante hacia el objetivo según la posición en el camino
+            Events.on(engine, 'beforeUpdate', function () {
+                if (ball.pathIndex < paths.length) {
+                    var pathTarget = paths[ball.pathIndex];
+                    var distance = Math.sqrt(Math.pow(pathTarget.x - ball.position.x, 2) + Math.pow(pathTarget.y - ball.position.y, 2));
+                    if (distance < 50) { // Si la bola está cerca del punto, avanzar al siguiente
+                        ball.pathIndex++;
+                    }
+                    if (ball.pathIndex < paths.length) { // Aplicar fuerza hacia el siguiente punto en el camino
+                        Body.applyForce(ball, ball.position, {
+                            x: (paths[ball.pathIndex].x - ball.position.x) * 0.00021,
+                            y: -0.03
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    // Ejecutar el motor y el render
+    Runner.run(Runner.create(), engine);
+    Render.run(render);
+
+    </script>
+</body>
+
+</html>
